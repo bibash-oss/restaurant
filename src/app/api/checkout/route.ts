@@ -11,6 +11,106 @@ interface CartRequestItem {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const isLiveSupabase =
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder-project");
+
+    const isStripeConfigured =
+      process.env.STRIPE_SECRET_KEY &&
+      !process.env.STRIPE_SECRET_KEY.includes("placeholder");
+
+    if (!isStripeConfigured) {
+      return NextResponse.json(
+        {
+          error:
+            "Stripe is not configured yet! Please add your real STRIPE_SECRET_KEY into .env.local.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // A. PAYING FOR AN EXISTING DISPATCHED ORDER (KOT FLOW)
+    if (body.orderId) {
+      const orderId = body.orderId as string;
+      const restaurantSlug = (body.restaurantSlug as string) || "golden-olive";
+
+      let existingOrder;
+      if (isLiveSupabase) {
+        const { data: dbOrder } = await supabaseAdmin
+          .from("orders")
+          .select("*, tables(table_number), order_items(*)")
+          .eq("id", orderId)
+          .single();
+        existingOrder = dbOrder;
+      } else {
+        existingOrder = DEMO_ORDERS.find((o) => o.id === orderId);
+      }
+
+      if (!existingOrder) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      const tableNum =
+        existingOrder.tables && typeof existingOrder.tables === "object"
+          ? "table_number" in existingOrder.tables
+            ? existingOrder.tables.table_number
+            : "Table"
+          : "Table";
+
+      const lineItems = (existingOrder.order_items || []).map((it: { item_name: string; unit_price: number; quantity: number }) => ({
+        price_data: {
+          currency: existingOrder.currency || "aud",
+          product_data: {
+            name: `${it.item_name} (${tableNum})`,
+          },
+          unit_amount: it.unit_price,
+        },
+        quantity: it.quantity,
+      }));
+
+      // Pre-create customer with Australia default country
+      const customer = await stripe.customers.create({
+        address: { country: "AU" },
+      });
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customer.id,
+        customer_update: { address: "auto", name: "auto" },
+        payment_method_types: ["card"],
+        line_items: lineItems.length > 0 ? lineItems : [
+          {
+            price_data: {
+              currency: existingOrder.currency || "aud",
+              product_data: { name: `Dine-In Order (${tableNum})` },
+              unit_amount: existingOrder.total_amount || 1000,
+            },
+            quantity: 1,
+          }
+        ],
+        mode: "payment",
+        metadata: {
+          order_id: existingOrder.id,
+          restaurant_slug: restaurantSlug,
+          table_number: tableNum,
+        },
+        success_url: `${appUrl}/restaurant/${restaurantSlug}/order-status/${existingOrder.id}?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/restaurant/${restaurantSlug}/order-status/${existingOrder.id}?canceled=true`,
+      });
+
+      if (isLiveSupabase) {
+        await supabaseAdmin
+          .from("orders")
+          .update({ stripe_session_id: session.id })
+          .eq("id", existingOrder.id);
+      } else {
+        existingOrder.stripe_session_id = session.id;
+      }
+
+      return NextResponse.json({ checkoutUrl: session.url, orderId: existingOrder.id });
+    }
+
+    // B. NEW CART CHECKOUT FLOW
     const { items, restaurantSlug, qrToken, customerNotes } = body as {
       items: CartRequestItem[];
       restaurantSlug: string;
@@ -22,17 +122,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-
     // 1. Authoritative Restaurant & Table Lookup
     let restaurantId: string;
     let tableId: string;
     let tableNumber: string;
     let currency = "aud";
-
-    const isLiveSupabase =
-      process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder-project");
 
     if (isLiveSupabase) {
       // Fetch restaurant
@@ -216,20 +310,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Create Stripe Checkout Session (STRICT - NO DEMO BYPASS)
-    const isStripeConfigured =
-      process.env.STRIPE_SECRET_KEY &&
-      !process.env.STRIPE_SECRET_KEY.includes("placeholder");
-
-    if (!isStripeConfigured) {
-      return NextResponse.json(
-        {
-          error:
-            "Stripe is not configured yet! Please add your real STRIPE_SECRET_KEY (sk_test_...) into .env.local to process real payments.",
-        },
-        { status: 400 }
-      );
-    }
-
     // Pre-create customer with Australia default country
     const customer = await stripe.customers.create({
       address: {

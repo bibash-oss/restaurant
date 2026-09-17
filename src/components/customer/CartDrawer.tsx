@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CartItem } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
-import { X, Trash2, Plus, Minus, ShoppingBag, ShieldCheck, Loader2 } from "lucide-react";
+import { X, Trash2, Plus, Minus, ShoppingBag, Send, ChefHat, Loader2 } from "lucide-react";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -37,12 +37,12 @@ export function CartDrawer({
     0
   );
 
-  async function handleCheckout() {
+  async function handleConfirmOrder() {
     setIsCheckingOut(true);
     setErrorMessage(null);
 
     try {
-      const response = await fetch("/api/checkout", {
+      const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -59,15 +59,16 @@ export function CartDrawer({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create checkout session");
+        throw new Error(data.error || "Failed to confirm order with kitchen");
       }
 
-      if (data.checkoutUrl) {
-        // Redirect customer to Stripe Checkout (or demo confirmation page)
-        window.location.href = data.checkoutUrl;
+      if (data.orderId) {
+        // Clear customer cart and redirect to order status
+        onClearCart();
+        window.location.href = `/restaurant/${restaurantSlug}/order-status/${data.orderId}`;
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Checkout error occurred";
+      const msg = err instanceof Error ? err.message : "Order submission error";
       setErrorMessage(msg);
       setIsCheckingOut(false);
     }
@@ -195,22 +196,26 @@ export function CartDrawer({
 
             <button
               type="button"
-              onClick={handleCheckout}
+              onClick={handleConfirmOrder}
               disabled={isCheckingOut}
-              className="w-full py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-75 touch-manipulation"
+              className="w-full py-4 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-zinc-950 font-black text-sm shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-75 touch-manipulation cursor-pointer"
             >
               {isCheckingOut ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Preparing Secure Checkout...</span>
+                  <span>Sending to Kitchen...</span>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Pay with Stripe ({formatCurrency(totalCents)})</span>
+                  <Send className="w-4 h-4" />
+                  <span>Confirm Order ({formatCurrency(totalCents)})</span>
                 </>
               )}
             </button>
+
+            <p className="text-[11px] text-zinc-400 text-center font-medium leading-relaxed">
+              Ticket sent directly to the kitchen. You will receive payment options once food is dispatched.
+            </p>
 
             <div className="flex items-center justify-between text-[11px] text-zinc-400">
               <span className="flex items-center gap-1">

@@ -43,7 +43,7 @@ export interface MenuItem {
   updated_at: string;
 }
 
-export type OrderStatus = 'PENDING' | 'PAID' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus = 'PENDING' | 'PREPARING' | 'DISPATCHED' | 'PAID' | 'READY' | 'COMPLETED' | 'CANCELLED';
 
 export interface OrderItem {
   id: string;

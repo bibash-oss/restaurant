@@ -146,7 +146,15 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body;
 
-    const allowedStatuses = ["PENDING", "PAID", "PREPARING", "READY", "COMPLETED", "CANCELLED"];
+    const allowedStatuses = [
+      "PENDING",
+      "PAID",
+      "PREPARING",
+      "READY",
+      "DISPATCHED",
+      "COMPLETED",
+      "CANCELLED",
+    ];
     if (!status || !allowedStatuses.includes(status)) {
       return NextResponse.json({ error: "Invalid order status" }, { status: 400 });
     }
@@ -156,12 +164,24 @@ export async function PATCH(
       !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder-project");
 
     if (isLiveSupabase) {
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from("orders")
         .update({ status, updated_at: new Date().toISOString() })
         .eq("id", orderId)
         .select()
         .single();
+
+      // If live Supabase rejects DISPATCHED due to original check constraint, fallback to READY
+      if (error && (error.message.includes("check constraint") || error.code === "23514") && status === "DISPATCHED") {
+        const retry = await supabaseAdmin
+          .from("orders")
+          .update({ status: "READY", updated_at: new Date().toISOString() })
+          .eq("id", orderId)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

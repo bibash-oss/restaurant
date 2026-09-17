@@ -11,6 +11,7 @@ import {
   QrCode,
   BookOpen,
   ClipboardList,
+  ChefHat,
   ExternalLink,
   Volume2,
   VolumeX,
@@ -40,7 +41,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             // Check for order status becoming PAID from Stripe
             const hasNewPaid = data.some((newOrd) => {
               const old = prevOrdersRef.current!.find((o) => o.id === newOrd.id);
-              return old && old.status === "PENDING" && newOrd.status === "PAID";
+              return old && old.status !== "PAID" && newOrd.status === "PAID";
             });
 
             if (hasNewOrder) {
@@ -64,6 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const navItems = [
     { href: "/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/admin/kot", label: "KOT (Kitchen)", icon: ChefHat },
     { href: "/admin/orders", label: "Live Orders", icon: ClipboardList },
     { href: "/admin/tables", label: "Tables & QR Codes", icon: QrCode },
     { href: "/admin/menu", label: "Menu Management", icon: BookOpen },

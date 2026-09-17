@@ -63,6 +63,9 @@ export default function AdminOrdersPage() {
   const filteredOrders = orders.filter((o) => {
     if (filter === "ALL") return true;
     if (filter === "ACTIVE") return o.status !== "COMPLETED" && o.status !== "CANCELLED";
+    if (filter === "PAID") return o.status === "PAID";
+    if (filter === "UNPAID") return o.status === "PREPARING" || o.status === "DISPATCHED" || o.status === "PENDING";
+    if (filter === "COMPLETED") return o.status === "COMPLETED";
     return o.status === filter;
   });
 
@@ -73,15 +76,14 @@ export default function AdminOrdersPage() {
         <div>
           <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2.5">
             <ClipboardList className="w-6 h-6 text-amber-500" />
-            <span>Live Kitchen & Floor Orders</span>
+            <span>Live Floor Orders &amp; Payment Status</span>
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Real-time incoming orders from customer table QR scans
+            Monitor dining tables, billing amounts, and Stripe payment verifications
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-
           <button
             onClick={fetchOrders}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-xs cursor-pointer"
@@ -94,17 +96,22 @@ export default function AdminOrdersPage() {
 
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {["ALL", "ACTIVE", "COMPLETED"].map((f) => (
+        {[
+          { key: "ALL", label: "All Orders" },
+          { key: "UNPAID", label: "Awaiting Pay" },
+          { key: "PAID", label: "Paid via Stripe" },
+          { key: "COMPLETED", label: "Completed" },
+        ].map((f) => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              filter === f
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              filter === f.key
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs"
-                : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
+                : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800"
             }`}
           >
-            {f === "ALL" ? "All Orders" : f === "ACTIVE" ? "Active / In Kitchen" : "Completed Orders"}
+            {f.label}
           </button>
         ))}
       </div>
